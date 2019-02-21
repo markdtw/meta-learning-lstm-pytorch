@@ -7,7 +7,6 @@ import logging
 
 import torch
 import numpy as np
-import pandas as pd
 import PIL.Image as PILI
 import matplotlib.pyplot as plt
 
@@ -20,6 +19,8 @@ class GOATLogger:
         self.log_freq = log_freq
 
         if self.mode == 'train':
+            self.stats = {'train': {'loss': [], 'acc': []},
+                          'eval': {'loss': [], 'acc': []}}
             if not os.path.exists(self.save_root):
                 os.mkdir(self.save_root)
             filename = os.path.join(self.save_root, 'console.log')
@@ -35,23 +36,49 @@ class GOATLogger:
 
             logging.info("Logger created at {}".format(filename))
         else:
+            self.stats = {'eval': {'loss': [], 'acc': []}}
             logging.basicConfig(level=logging.INFO,
                 format='%(asctime)s.%(msecs)03d - %(message)s',
                 datefmt='%b-%d %H:%M:%S')
 
     def batch_info(self, **kwargs):
         if kwargs['phase'] == 'train':
-            if kwargs['eps'] % self.log_freq == 0 and kwargs['eps'] != 0:
-                strout = '[{:5d}/{:5d}] loss: {:6.4f}, acc: {:6.3f}%'.format(\
-                    kwargs['eps'], kwargs['eps_total'], kwargs['loss'], kwargs['acc'])
-                self.loginfo(strout)
-        else:
-            strout = '[{:5d}] Eval ({:3d} episode) - loss: {:6.4f}, acc: {:6.3f}%'.format(\
-                kwargs['eps'], kwargs['eps_total'], kwargs['loss'], kwargs['acc'])
-            self.loginfo(strout)
+            self.stats['train']['loss'].append(kwargs['loss'])
+            self.stats['train']['acc'].append(kwargs['acc'])
 
-    def save_stats(self):
-        return
+            if kwargs['eps'] % self.log_freq == 0 and kwargs['eps'] != 0:
+                self.loginfo("[{:5d}/{:5d}] loss: {:6.4f}, acc: {:6.3f}%".format(\
+                    kwargs['eps'], kwargs['totaleps'], kwargs['loss'], kwargs['acc']))
+
+        elif kwargs['phase'] == 'eval':
+            self.stats['eval']['loss'].append(kwargs['loss'])
+            self.stats['eval']['acc'].append(kwargs['acc'])
+
+        elif kwargs['phase'] == 'evaldone':
+            loss_mean = np.mean(self.stats['eval']['loss'])
+            loss_std = np.std(self.stats['eval']['loss'])
+            acc_mean = np.mean(self.stats['eval']['acc'])
+            acc_std = np.std(self.stats['eval']['acc'])
+            self.loginfo("[{:5d}] Eval ({:3d} episode) - loss: {:6.4f} +- {:6.4f}, acc: {:6.3f}% +- {:6.3f}%".format(\
+                kwargs['eps'], kwargs['totaleps'], loss_mean, loss_std, acc_mean, acc_std))
+
+            self.draw_stats()
+            self.stats['eval']['loss'] = []
+            self.stats['eval']['acc'] = []
+
+        else:
+            raise ValueError("phase {} not supported".format(kwargs['phase']))
+
+    def draw_stats(self):
+        plt.style.use('seaborn-darkgrid')
+        for item in ['loss', 'acc']:
+            plt.plot(np.arange(len(self.stats['train'][item])), self.stats['train'][item])
+            plt.xlabel('training episodes')
+            plt.ylabel(item)
+            plt.title('Training {}'.format(item))
+            plt.savefig(os.path.join(self.save_root, '{}.png'.format(item)))
+            plt.clf()
+
     def logdebug(self, strout):
         logging.debug(strout)
     def loginfo(self, strout):
@@ -59,10 +86,9 @@ class GOATLogger:
 
 
 def torch_tensor_to_pil(torch_tensor):
-    """Simply convert a torch tensor t oa pillow savable image object
+    """Convert a torch tensor to pillow savable image object (NOT USED, JUST A TOOL)
     Args:
         torch_tensor (torch.FloatTensor): of torch.Size([n, c, h, w])
-
     Return:
         array_pil (Pillow Image)
     """
@@ -73,7 +99,7 @@ def torch_tensor_to_pil(torch_tensor):
     if array_np.shape[-1] == 3:
         array_pil = PILI.fromarray(array_np[0], mode='RGB')
     elif array_np.shape[-1] == 1:
-        array_pil = PILI.fraomarray(array_np[0, :, :, 0], mode='P')
+        array_pil = PILI.fromarray(array_np[0, :, :, 0], mode='P')
 
     return array_pil
 
@@ -99,7 +125,7 @@ def save_ckpt(episode, metalearner, optim, save):
         os.mkdir(os.path.join(save, 'ckpts'))
 
     torch.save({
-        'episode': episode + 1,
+        'episode': episode,
         'metalearner': metalearner.state_dict(),
         'optim': optim.state_dict()
     }, os.path.join(save, 'ckpts', 'meta-learner-{}.pth.tar'.format(episode)))
@@ -107,9 +133,10 @@ def save_ckpt(episode, metalearner, optim, save):
 
 def resume_ckpt(metalearner, optim, resume, device):
     ckpt = torch.load(resume, map_location=device)
+    last_episode = ckpt['episode']
     metalearner.load_state_dict(ckpt['metalearner'])
     optim.load_state_dict(ckpt['optim'])
-    return metalearner, optim
+    return last_episode, metalearner, optim
 
 
 def preprocess_grad_loss(x):

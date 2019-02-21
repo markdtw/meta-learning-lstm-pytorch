@@ -19,7 +19,5 @@ python main.py --mode train \
                --bn-eps 1e-3 \
                --data miniimagenet \
                --data-root data/miniImagenet/ \
-               --save ckpts/ \
-               --n-workers 4 \
                --pin-mem True \
                --log-freq 100
