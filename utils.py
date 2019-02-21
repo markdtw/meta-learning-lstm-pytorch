@@ -47,6 +47,7 @@ class GOATLogger:
             self.stats['train']['acc'].append(kwargs['acc'])
 
             if kwargs['eps'] % self.log_freq == 0 and kwargs['eps'] != 0:
+                self.draw_stats()
                 self.loginfo("[{:5d}/{:5d}] loss: {:6.4f}, acc: {:6.3f}%".format(\
                     kwargs['eps'], kwargs['totaleps'], kwargs['loss'], kwargs['acc']))
 
@@ -59,10 +60,9 @@ class GOATLogger:
             loss_std = np.std(self.stats['eval']['loss'])
             acc_mean = np.mean(self.stats['eval']['acc'])
             acc_std = np.std(self.stats['eval']['acc'])
-            self.loginfo("[{:5d}] Eval ({:3d} episode) - loss: {:6.4f} +- {:6.4f}, acc: {:6.3f}% +- {:6.3f}%".format(\
+            self.loginfo("[{:5d}] Eval ({:3d} episode) - loss: {:6.4f} +- {:6.4f}, acc: {:6.3f}% +- {:5.3f}%".format(\
                 kwargs['eps'], kwargs['totaleps'], loss_mean, loss_std, acc_mean, acc_std))
 
-            self.draw_stats()
             self.stats['eval']['loss'] = []
             self.stats['eval']['acc'] = []
 
@@ -83,25 +83,6 @@ class GOATLogger:
         logging.debug(strout)
     def loginfo(self, strout):
         logging.info(strout)
-
-
-def torch_tensor_to_pil(torch_tensor):
-    """Convert a torch tensor to pillow savable image object (NOT USED, JUST A TOOL)
-    Args:
-        torch_tensor (torch.FloatTensor): of torch.Size([n, c, h, w])
-    Return:
-        array_pil (Pillow Image)
-    """
-    array_np = torch_tensor.cpu().numpy()
-    array_np = array_np.transpose([0, 2, 3, 1]) # (n, h, w, c)
-    array_np = (array_np * 255).astype(np.uint8)
-
-    if array_np.shape[-1] == 3:
-        array_pil = PILI.fromarray(array_np[0], mode='RGB')
-    elif array_np.shape[-1] == 1:
-        array_pil = PILI.fromarray(array_np[0, :, :, 0], mode='P')
-
-    return array_pil
 
 
 def accuracy(output, target, topk=(1,)):
@@ -147,6 +128,5 @@ def preprocess_grad_loss(x):
     x_proc1 = indicator * torch.log(x.abs() + 1e-8) / p + (1 - indicator) * -1
     # preproc2
     x_proc2 = indicator * torch.sign(x) + (1 - indicator) * np.exp(p) * x
-
     return torch.stack((x_proc1, x_proc2), 1)
 
