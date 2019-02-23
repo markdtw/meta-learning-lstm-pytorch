@@ -38,13 +38,6 @@ class Learner(nn.Module):
         self.model.update({'cls': nn.Linear(32 * clr_in * clr_in, n_classes)})
         self.criterion = nn.CrossEntropyLoss()
 
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.Linear):
-                m.reset_parameters()
-
     def forward(self, x):
         x = self.model.features(x)
         x = torch.reshape(x, [x.size(0), -1])
@@ -60,15 +53,15 @@ class Learner(nn.Module):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.Linear):
                 wlen = m._parameters['weight'].view(-1).size(0)
                 blen = m._parameters['bias'].view(-1).size(0)
-                if mode == 0:   # set parameters as tensors
-                    m._parameters['weight'] = m._parameters['weight'].data
-                    m._parameters['bias'] = m._parameters['bias'].data
-                elif mode == 1: # simply copy the data from tensor to parameters
+                if mode == 0:   # set parameters as tensors, remove gradients
+                    m._parameters['weight'] = flat_params[idx: idx+wlen].view_as(m._parameters['weight']).data
+                    m._parameters['bias'] = flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias']).data
+                elif mode == 1: # simply copy the data from tensor to parameters (now tensors)
                     m._parameters['weight'].data.copy_(flat_params[idx: idx+wlen].view_as(m._parameters['weight']))
                     m._parameters['bias'].data.copy_(flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias']))
-                elif mode == 2: # assign the tensors (retain grad_fn and the backward properties)
-                    m._parameters['weight'] = flat_params[idx: idx+wlen].view_as(m._parameters['weight'])
-                    m._parameters['bias'] = flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias'])
+                elif mode == 2: # clone the tensors with gradients functions and all
+                    m._parameters['weight'] = flat_params[idx: idx+wlen].view_as(m._parameters['weight']).clone()
+                    m._parameters['bias'] = flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias']).clone()
                 else:
                     raise ValueError("mode = {} not supported".format(mode))
                 idx += wlen + blen

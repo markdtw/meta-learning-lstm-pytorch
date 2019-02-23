@@ -48,7 +48,7 @@ class GOATLogger:
 
             if kwargs['eps'] % self.log_freq == 0 and kwargs['eps'] != 0:
                 self.draw_stats()
-                self.loginfo("[{:5d}/{:5d}] loss: {:6.4f}, acc: {:6.3f}%".format(\
+                self.loginfo("[{:5d}/{:5d}] loss: {:7.5f}, acc: {:7.4f}%".format(\
                     kwargs['eps'], kwargs['totaleps'], kwargs['loss'], kwargs['acc']))
 
         elif kwargs['phase'] == 'eval':

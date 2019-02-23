@@ -1,6 +1,7 @@
 from __future__ import division, print_function, absolute_import
 
 import pdb
+import math
 import torch
 import torch.nn as nn
 
@@ -23,13 +24,15 @@ class MetaLSTMCell(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
+        stdv = 1.0 / math.sqrt(self.input_size + 2)
         for weight in self.parameters():
-            nn.init.constant_(weight, 0.0)
+            nn.init.uniform_(weight, -stdv, stdv)
 
         # want initial forget value to be high and input value to be low so that 
         #  model starts with gradient descent
-        nn.init.uniform_(self.bF, 4, 5)
-        nn.init.uniform_(self.bI, -5, -4)
+        nn.init.uniform_(self.bF, 8, 10)
+        #nn.init.uniform_(self.bI, -6.9, -4.6)
+        nn.init.uniform_(self.bI, -4.6, -3.)
 
     def forward(self, inputs, hx):
         """Args:
