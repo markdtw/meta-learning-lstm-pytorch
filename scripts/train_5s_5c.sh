@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# For 5-shot, 5-class training, hyper-parameters follow github.com/twitter/meta-learning-lstm
+# For 5-shot, 5-class training
+# Hyper-parameters follow https://github.com/twitter/meta-learning-lstm
 
 python main.py --mode train \
                --n-shot 5 \
@@ -20,6 +21,5 @@ python main.py --mode train \
                --data miniimagenet \
                --data-root data/miniImagenet/ \
                --pin-mem True \
-               --log-freq 50
-               #--bn-momentum 0.95 \
-               #--bn-eps 1e-3 \
+               --log-freq 100 \
+               --val-freq 1000

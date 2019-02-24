@@ -47,22 +47,31 @@ class Learner(nn.Module):
     def get_flat_params(self):
         return torch.cat([p.view(-1) for p in self.model.parameters()], 0)
 
-    def set_params(self, mode, flat_params=None):
+    def copy_flat_params(self, cI):
+        idx = 0
+        for p in self.model.parameters():
+            plen = p.view(-1).size(0)
+            p.data.copy_(cI[idx: idx+plen].view_as(p))
+            idx += plen
+
+    def transfer_params(self, learner_w_grad, cI):
+        # Use load_state_dict only to copy the running mean/var in batchnorm, the values of the parameters
+        #  are going to be replaced by cI
+        self.load_state_dict(learner_w_grad.state_dict())
+        #  replace nn.Parameters with tensors from cI (NOT nn.Parameters anymore).
         idx = 0
         for m in self.model.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.Linear):
                 wlen = m._parameters['weight'].view(-1).size(0)
-                blen = m._parameters['bias'].view(-1).size(0)
-                if mode == 0:   # set parameters as tensors, remove gradients
-                    m._parameters['weight'] = flat_params[idx: idx+wlen].view_as(m._parameters['weight']).data
-                    m._parameters['bias'] = flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias']).data
-                elif mode == 1: # simply copy the data from tensor to parameters (now tensors)
-                    m._parameters['weight'].data.copy_(flat_params[idx: idx+wlen].view_as(m._parameters['weight']))
-                    m._parameters['bias'].data.copy_(flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias']))
-                elif mode == 2: # clone the tensors with gradients functions and all
-                    m._parameters['weight'] = flat_params[idx: idx+wlen].view_as(m._parameters['weight']).clone()
-                    m._parameters['bias'] = flat_params[idx+wlen: idx+wlen+blen].view_as(m._parameters['bias']).clone()
-                else:
-                    raise ValueError("mode = {} not supported".format(mode))
-                idx += wlen + blen
+                m._parameters['weight'] = cI[idx: idx+wlen].view_as(m._parameters['weight']).clone()
+                idx += wlen
+                if m._parameters['bias'] is not None:
+                    blen = m._parameters['bias'].view(-1).size(0)
+                    m._parameters['bias'] = cI[idx: idx+blen].view_as(m._parameters['bias']).clone()
+                    idx += blen
+
+    def reset_batch_stats(self):
+        for m in self.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                m.reset_running_stats()
 

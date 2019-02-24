@@ -69,27 +69,27 @@ FLAGS.add_argument('--log-freq', type=int, default=100,
                    help="Logging frequency")
 FLAGS.add_argument('--val-freq', type=int, default=1000,
                    help="Validation frequency")
-FLAGS.add_argument('--seed', type=int, default=420,
+FLAGS.add_argument('--seed', type=int,
                    help="Random seed")
 
 
-def meta_test(eps, val_loader, learner, dummy_learner, init_learner, metalearner, args, logger):
-    for subeps, (episode_x, episode_y) in enumerate(tqdm(val_loader, ascii=True)):
+def meta_test(eps, eval_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger):
+    for subeps, (episode_x, episode_y) in enumerate(tqdm(eval_loader, ascii=True)):
         train_input = episode_x[:, :args.n_shot].reshape(-1, *episode_x.shape[-3:]).to(args.dev) # [n_class * n_shot, :]
         train_target = torch.LongTensor(np.repeat(range(args.n_class), args.n_shot)).to(args.dev) # [n_class * n_shot]
         test_input = episode_x[:, args.n_shot:].reshape(-1, *episode_x.shape[-3:]).to(args.dev) # [n_class * n_eval, :]
         test_target = torch.LongTensor(np.repeat(range(args.n_class), args.n_eval)).to(args.dev) # [n_class * n_eval]
 
         # Train learner with metalearner
-        metalearner.eval()
-        learner.set_params(0, init_learner.get_flat_params())
-        flat_learner = train_learner(learner.get_flat_params(), dummy_learner, metalearner, train_input, train_target, args)
+        learner_w_grad.reset_batch_stats()
+        learner_wo_grad.reset_batch_stats()
+        learner_w_grad.train()
+        learner_wo_grad.eval()
+        cI = train_learner(learner_w_grad, metalearner, train_input, train_target, args)
 
-        # Train meta-learner with validation loss
-        metalearner.train()
-        learner.set_params(2, flat_learner)
-        output = learner(test_input)
-        loss = learner.criterion(output, test_target)
+        learner_wo_grad.transfer_params(learner_w_grad, cI)
+        output = learner_wo_grad(test_input)
+        loss = learner_wo_grad.criterion(output, test_target)
         acc = accuracy(output, test_target)
  
         logger.batch_info(loss=loss.item(), acc=acc, phase='eval')
@@ -97,32 +97,33 @@ def meta_test(eps, val_loader, learner, dummy_learner, init_learner, metalearner
     logger.batch_info(eps=eps, totaleps=args.episode_val, phase='evaldone')
 
 
-def train_learner(flat_learner, dummy_learner, metalearner, train_input, train_target, args):
-    hs = [[None, [None, None, flat_learner.unsqueeze(1)]]]
+def train_learner(learner_w_grad, metalearner, train_input, train_target, args):
+    cI = metalearner.metalstm.cI.data
+    hs = [None]
     for _ in range(args.epoch):
         for i in range(0, len(train_input), args.batch_size):
             x = train_input[i:i+args.batch_size]
             y = train_target[i:i+args.batch_size]
 
-            # get the loss/grad from dummy learner
-            dummy_learner.set_params(1, flat_learner)
-            output = dummy_learner(x)
-            loss = dummy_learner.criterion(output, y)
+            # get the loss/grad
+            learner_w_grad.copy_flat_params(cI)
+            output = learner_w_grad(x)
+            loss = learner_w_grad.criterion(output, y)
             acc = accuracy(output, y)
-            dummy_learner.zero_grad()
+            learner_w_grad.zero_grad()
             loss.backward()
-            grad = torch.cat([p.grad.data.view(-1) / args.batch_size for p in dummy_learner.parameters()], 0)
+            grad = torch.cat([p.grad.data.view(-1) / args.batch_size for p in learner_w_grad.parameters()], 0)
 
             # preprocess grad & loss and metalearner forward
             grad_prep = preprocess_grad_loss(grad)  # [n_learner_params, 2]
             loss_prep = preprocess_grad_loss(loss.data.unsqueeze(0)) # [1, 2]
             metalearner_input = [loss_prep, grad_prep, grad.unsqueeze(1)]
-            flat_learner, h = metalearner(metalearner_input, hs[-1])
+            cI, h = metalearner(metalearner_input, hs[-1])
             hs.append(h)
 
             #print("training loss: {:8.6f} acc: {:6.3f}, mean grad: {:8.6f}".format(loss, acc, torch.mean(grad)))
 
-    return flat_learner
+    return cI
 
 
 def main():
@@ -131,10 +132,12 @@ def main():
     if len(unparsed) != 0:
         raise NameError("Argument {} not recognized".format(unparsed))
 
-    logger = GOATLogger(args.mode, args.save, args.log_freq)
+    if args.seed is None:
+        args.seed = random.randint(0, 1e3)
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
     if args.cpu:
         args.dev = torch.device('cpu')
     else:
@@ -145,14 +148,16 @@ def main():
         torch.backends.cudnn.benchmark = False
         args.dev = torch.device('cuda')
 
+    logger = GOATLogger(args)
+
     # Get data
     train_loader, val_loader, test_loader = prepare_data(args)
-
+    
     # Set up learner, meta-learner
-    learner = Learner(args.image_size, args.bn_eps, args.bn_momentum, args.n_class).to(args.dev)
-    dummy_learner = copy.deepcopy(learner)
-    init_learner = copy.deepcopy(learner)
-    metalearner = MetaLearner(args.input_size, args.hidden_size).to(args.dev)
+    learner_w_grad = Learner(args.image_size, args.bn_eps, args.bn_momentum, args.n_class).to(args.dev)
+    learner_wo_grad = copy.deepcopy(learner_w_grad)
+    metalearner = MetaLearner(args.input_size, args.hidden_size, learner_w_grad.get_flat_params().size(0)).to(args.dev)
+    metalearner.metalstm.init_cI(learner_w_grad.get_flat_params())
 
     # Set up loss, optimizer, learning rate scheduler
     optim = torch.optim.Adam(metalearner.parameters(), args.lr)
@@ -162,7 +167,7 @@ def main():
         last_eps, metalearner, optim = resume_ckpt(metalearner, optim, args.resume, args.dev)
 
     if args.mode == 'test':
-        meta_test(last_eps, val_loader, learner, dummy_learner, metalearner, args, logger)
+        meta_test(last_eps, test_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger)
         return
 
     logger.loginfo("Start training")
@@ -170,41 +175,35 @@ def main():
     for eps, (episode_x, episode_y) in enumerate(train_loader):
         # episode_x.shape = [n_class, n_shot + n_eval, c, h, w]
         # episode_y.shape = [n_class, n_shot + n_eval] --> NEVER USED
-        perm = torch.randperm(args.batch_size)
         train_input = episode_x[:, :args.n_shot].reshape(-1, *episode_x.shape[-3:]).to(args.dev) # [n_class * n_shot, :]
         train_target = torch.LongTensor(np.repeat(range(args.n_class), args.n_shot)).to(args.dev) # [n_class * n_shot]
-        train_input = train_input[perm]
-        train_target = train_target[perm]
-
         test_input = episode_x[:, args.n_shot:].reshape(-1, *episode_x.shape[-3:]).to(args.dev) # [n_class * n_eval, :]
         test_target = torch.LongTensor(np.repeat(range(args.n_class), args.n_eval)).to(args.dev) # [n_class * n_eval]
-        test_input = test_input[perm]
-        test_target = test_target[perm]
 
         # Train learner with metalearner
-        metalearner.eval()
-        learner.set_params(0, init_learner.get_flat_params())
-        flat_learner = train_learner(learner.get_flat_params(), dummy_learner, metalearner, train_input, train_target, args)
+        learner_w_grad.reset_batch_stats()
+        learner_wo_grad.reset_batch_stats()
+        learner_w_grad.train()
+        learner_wo_grad.train()
+        cI = train_learner(learner_w_grad, metalearner, train_input, train_target, args)
 
         # Train meta-learner with validation loss
-        metalearner.train()
-        learner.set_params(2, flat_learner)
-        output = learner(test_input)
-        loss = learner.criterion(output, test_target)
+        learner_wo_grad.transfer_params(learner_w_grad, cI)
+        output = learner_wo_grad(test_input)
+        loss = learner_wo_grad.criterion(output, test_target)
         acc = accuracy(output, test_target)
         
         optim.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(metalearner.parameters(), args.grad_clip)
         optim.step()
-        #pdb.set_trace()
 
         logger.batch_info(eps=eps, totaleps=args.episode, loss=loss.item(), acc=acc, phase='train')
 
         # Meta-validation
         if eps % args.val_freq == 0 and eps != 0:
             save_ckpt(eps, metalearner, optim, args.save)
-            meta_test(eps, val_loader, learner, dummy_learner, init_learner, metalearner, args, logger)
+            meta_test(eps, val_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger)
 
     logger.loginfo("Done")
 

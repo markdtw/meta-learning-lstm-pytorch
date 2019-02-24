@@ -2,25 +2,24 @@ from __future__ import division, print_function, absolute_import
 
 import os
 import pdb
-import time
+import datetime
 import logging
 
 import torch
 import numpy as np
-import PIL.Image as PILI
-import matplotlib.pyplot as plt
 
 
 class GOATLogger:
 
-    def __init__(self, mode, save_root, log_freq=100):
-        self.mode = mode
-        self.save_root = save_root
-        self.log_freq = log_freq
+    def __init__(self, args):
+        now = datetime.datetime.now()
+        args.save = args.save + '-{:02d}{:02d}'.format(now.hour, now.minute)
+
+        self.mode = args.mode
+        self.save_root = args.save
+        self.log_freq = args.log_freq
 
         if self.mode == 'train':
-            self.stats = {'train': {'loss': [], 'acc': []},
-                          'eval': {'loss': [], 'acc': []}}
             if not os.path.exists(self.save_root):
                 os.mkdir(self.save_root)
             filename = os.path.join(self.save_root, 'console.log')
@@ -36,10 +35,19 @@ class GOATLogger:
 
             logging.info("Logger created at {}".format(filename))
         else:
-            self.stats = {'eval': {'loss': [], 'acc': []}}
             logging.basicConfig(level=logging.INFO,
                 format='%(asctime)s.%(msecs)03d - %(message)s',
                 datefmt='%b-%d %H:%M:%S')
+
+        logging.info("Random Seed: {}".format(args.seed))
+        self.reset_stats()
+
+    def reset_stats(self):
+        if self.mode == 'train':
+           self.stats = {'train': {'loss': [], 'acc': []},
+                          'eval': {'loss': [], 'acc': []}}
+        else:
+            self.stats = {'eval': {'loss': [], 'acc': []}}
 
     def batch_info(self, **kwargs):
         if kwargs['phase'] == 'train':
@@ -47,9 +55,11 @@ class GOATLogger:
             self.stats['train']['acc'].append(kwargs['acc'])
 
             if kwargs['eps'] % self.log_freq == 0 and kwargs['eps'] != 0:
-                self.draw_stats()
-                self.loginfo("[{:5d}/{:5d}] loss: {:7.5f}, acc: {:7.4f}%".format(\
-                    kwargs['eps'], kwargs['totaleps'], kwargs['loss'], kwargs['acc']))
+                loss_mean = np.mean(self.stats['train']['loss'])
+                acc_mean = np.mean(self.stats['train']['acc'])
+                #self.draw_stats()
+                self.loginfo("[{:5d}/{:5d}] loss: {:6.4f} ({:6.4f}), acc: {:6.3f}% ({:6.3f}%)".format(\
+                    kwargs['eps'], kwargs['totaleps'], kwargs['loss'], loss_mean, kwargs['acc'], acc_mean))
 
         elif kwargs['phase'] == 'eval':
             self.stats['eval']['loss'].append(kwargs['loss'])
@@ -60,24 +70,13 @@ class GOATLogger:
             loss_std = np.std(self.stats['eval']['loss'])
             acc_mean = np.mean(self.stats['eval']['acc'])
             acc_std = np.std(self.stats['eval']['acc'])
-            self.loginfo("[{:5d}] Eval ({:3d} episode) - loss: {:6.4f} +- {:6.4f}, acc: {:6.3f}% +- {:5.3f}%".format(\
+            self.loginfo("[{:5d}] Eval ({:3d} episode) - loss: {:6.4f} +- {:6.4f}, acc: {:6.3f} +- {:5.3f}%".format(\
                 kwargs['eps'], kwargs['totaleps'], loss_mean, loss_std, acc_mean, acc_std))
 
-            self.stats['eval']['loss'] = []
-            self.stats['eval']['acc'] = []
+            self.reset_stats()
 
         else:
             raise ValueError("phase {} not supported".format(kwargs['phase']))
-
-    def draw_stats(self):
-        plt.style.use('seaborn-darkgrid')
-        for item in ['loss', 'acc']:
-            plt.plot(np.arange(len(self.stats['train'][item])), self.stats['train'][item])
-            plt.xlabel('training episodes')
-            plt.ylabel(item)
-            plt.title('Training {}'.format(item))
-            plt.savefig(os.path.join(self.save_root, '{}.png'.format(item)))
-            plt.clf()
 
     def logdebug(self, strout):
         logging.debug(strout)
@@ -98,7 +97,7 @@ def accuracy(output, target, topk=(1,)):
         for k in topk:
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
-        return res[0].item() if len(topk) == 1 else [r.item() for r in res]
+        return res[0].item() if len(res) == 1 else [r.item() for r in res]
 
 
 def save_ckpt(episode, metalearner, optim, save):

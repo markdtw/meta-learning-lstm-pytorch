@@ -1,1 +1,63 @@
 # Optimization as a Model for Few-shot Learning
+Pytorch implementation of [Optimization as a Model for Few-shot Learning](https://openreview.net/forum?id=rJY0-Kcll) in ICLR 2017 (Oral)
+
+## Prerequisites
+- python 3+
+- pytorch 0.4+ (developed on 1.0.1 with cuda 9.0)
+- [pillow](https://pillow.readthedocs.io/en/stable/installation.html)
+- [tqdm](https://tqdm.github.io/) (a nice progress bar)
+
+## Data
+- miniImagenet as described [here](https://github.com/twitter/meta-learning-lstm/tree/master/data/miniImagenet)
+  - For convenince, you can download it from [here](https://drive.google.com/file/d/1rV3aj_hgfNTfCakffpPm7Vhpr1in87CR/view?usp=sharing) (aroung 2.7GB, google drive link)
+
+## Preparation
+- Make sure miniImagenet is split properly. For example, my setting looks like this:
+  ```
+  - data/
+    - miniImagenet/
+      - train/
+        - n01532829
+        - n01558993
+        - ...
+      - val/
+        - n01855672
+        - n02091244
+        - ...
+      - test/
+        - ...
+  - main.py
+  - ...
+  ```
+  - If you download and extract miniImagenet from the link above, it should be done already.
+- Check out `scripts/train_5s_5c.sh`, make sure `--data-root` is properly set
+
+## Run
+For 5-shot, 5-class training, run
+```bash
+bash scripts/train_5s_5c.sh
+```
+Hyper-parameters are referred to the [author's repo](https://github.com/twitter/meta-learning-lstm)
+
+## Notes
+- Results:
+  - This code is written following the reproducibility guidelines [here](https://pytorch.org/docs/stable/notes/randomness.html).
+  - Training with random seed 489, validation loss peaked at around 57.747% with low confidence (41000 episodes).
+  - Not yet test with test set.
+  - *I still yet to reach the results in the paper (paper reports 60.60% on test set). Open to discussion and help!*
+- The implementation replicates two learners similar to original repo:
+  - learner_w_grad: function as a regular model, get gradients and loss as inputs to meta learner during training.
+  - learner_wo_grad: construct the graph for meta learner, get the loss and backprop gradients to it during testing (meta-train):
+    - All the parameters in learner_wo_grad have to be replaced by cI output by meta learner.
+    - `nn.Parameters` in this model are casted to `torch.Tensor` to connect the graph to meta learner.
+- Several ways to **copy** a parameters from meta learner to learner depends on the scenario:
+  - `copy_flat_params`: we only need the parameter values and keep the original grad_fn (from cI to learner_w_grad).
+  - `transfer_params`: we want the values as well as the grad_fn (from cI to learner_wo_grad).
+    - `.data.copy_` v.s. `clone()` -> the latter retains all the properties of a tensor including grad_fn.
+    - To maintain the batch statistics, `load_state_dict` is used (from learner_w_grad to learner_wo_grad).
+
+## References
+- [CloserLookFewShot](https://github.com/wyharveychen/CloserLookFewShot) (Data loader)
+- [pytorch-meta-optimizer](https://github.com/ikostrikov/pytorch-meta-optimizer) (Cast `nn.Parameters` to `torch.Tensor` inspired from here)
+- [meta-learning-lstm](https://github.com/twitter/meta-learning-lstm) (Author's repo in Lua Torch)
+
