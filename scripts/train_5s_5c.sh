@@ -21,5 +21,5 @@ python main.py --mode train \
                --data miniimagenet \
                --data-root data/miniImagenet/ \
                --pin-mem True \
-               --log-freq 100 \
+               --log-freq 50 \
                --val-freq 1000
