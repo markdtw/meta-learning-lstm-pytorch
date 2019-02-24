@@ -1,6 +1,8 @@
 # Optimization as a Model for Few-shot Learning
 Pytorch implementation of [Optimization as a Model for Few-shot Learning](https://openreview.net/forum?id=rJY0-Kcll) in ICLR 2017 (Oral)
 
+![Model Architecture](https://i.imgur.com/lydKeUc.png)
+
 ## Prerequisites
 - python 3+
 - pytorch 0.4+ (developed on 1.0.1 with cuda 9.0)
@@ -47,12 +49,12 @@ Hyper-parameters are referred to the [author's repo](https://github.com/twitter/
   - Not yet test with test set.
   - *I still yet to reach the results in the paper (60.60% on test set with high confidence). Open to discussion and help!*
 - The implementation replicates two learners similar to original repo:
-  - `learner_w_grad` functions as a regular model, get gradients and loss as inputs to meta learner during training.
+  - `learner_w_grad` functions as a regular model, get gradients and loss as inputs to meta learner.
   - `learner_wo_grad` constructs the graph for meta learner:
     - All the parameters in `learner_wo_grad` are replaced by `cI` output by meta learner.
     - `nn.Parameters` in this model are casted to `torch.Tensor` to connect the graph to meta learner.
 - Several ways to **copy** a parameters from meta learner to learner depends on the scenario:
-  - `copy_flat_params`: we only need the parameter values and keep the original `grad_fn` (from `cI` to `learner_w_grad`).
+  - `copy_flat_params`: we only need the parameter values and keep the original `grad_fn`.
   - `transfer_params`: we want the values as well as the `grad_fn` (from `cI` to `learner_wo_grad`).
     - `.data.copy_` v.s. `clone()` -> the latter retains all the properties of a tensor including `grad_fn`.
     - To maintain the batch statistics, `load_state_dict` is used (from `learner_w_grad` to `learner_wo_grad`).
