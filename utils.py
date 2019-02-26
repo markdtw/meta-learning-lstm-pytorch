@@ -2,7 +2,6 @@ from __future__ import division, print_function, absolute_import
 
 import os
 import pdb
-import datetime
 import logging
 
 import torch
@@ -12,8 +11,7 @@ import numpy as np
 class GOATLogger:
 
     def __init__(self, args):
-        now = datetime.datetime.now()
-        args.save = args.save + '-{:02d}{:02d}'.format(now.hour, now.minute)
+        args.save = args.save + '-{}'.format(args.seed)
 
         self.mode = args.mode
         self.save_root = args.save
