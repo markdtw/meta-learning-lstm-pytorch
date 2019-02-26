@@ -55,6 +55,7 @@ Hyper-parameters are referred to the [author's repo](https://github.com/twitter/
 |  -|    -|  -|    -|  -|600|58.14|8.5|
 
 - The results I get from directly running the author's repo can be found [here](https://i.imgur.com/rtagm2c.png), I have slightly better performance (~5%) but neither results match the number in the paper (60%) *(Discussion and help are welcome!)*.
+- Training with the default settings takes ~2.5 hours on a single Titan Xp while occupying ~2 GB GPU memory.
 - The implementation replicates two learners similar to the author's repo:
   - `learner_w_grad` functions as a regular model, get gradients and loss as inputs to meta learner.
   - `learner_wo_grad` constructs the graph for meta learner:
