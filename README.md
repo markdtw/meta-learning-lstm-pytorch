@@ -40,7 +40,12 @@ For 5-shot, 5-class training, run
 ```bash
 bash scripts/train_5s_5c.sh
 ```
-Hyper-parameters are referred to the [author's repo](https://github.com/twitter/meta-learning-lstm)
+Hyper-parameters are referred to the [author's repo](https://github.com/twitter/meta-learning-lstm).
+
+For 5-shot, 5-class evaluation, run *(remember to change `--resume` and `--seed` arguments)*
+```bash
+bash scripts/eval_5s_5c.sh
+```
 
 ## Notes
 - Results (This repo is developed following the [pytorch reproducibility guideline](https://pytorch.org/docs/stable/notes/randomness.html)):
