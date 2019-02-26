@@ -43,11 +43,18 @@ bash scripts/train_5s_5c.sh
 Hyper-parameters are referred to the [author's repo](https://github.com/twitter/meta-learning-lstm)
 
 ## Notes
-- Results:
-  - This code is written following the reproducibility guidelines [here](https://pytorch.org/docs/stable/notes/randomness.html).
-  - Training with random seed 489 get 57.747% validation accuracy with low confidence (41000 episodes).
-  - Not yet test with test set.
-  - *I still yet to reach the results in the paper (60.60% on test set with high confidence). Open to discussion and help!*
+- Results (This repo is developed following the [pytorch reproducibility guideline](https://pytorch.org/docs/stable/notes/randomness.html)):
+
+|seed|train episodes|val episodes|val acc mean|val acc std|test episodes|test acc mean|test acc std|
+|-|-|-|-|-|-|-|-|
+|719|41000|100|59.08|9.9|100|56.59|8.4|
+|  -|    -|  -|    -|  -|250|57.85|8.6|
+|  -|    -|  -|    -|  -|600|57.76|8.6|
+| 53|44000|100|58.04|9.1|100|57.85|7.7|
+|  -|    -|  -|    -|  -|250|57.83|8.3|
+|  -|    -|  -|    -|  -|600|58.14|8.5|
+
+- The results I get from directly running the author's repo can be found [here](https://i.imgur.com/rtagm2c.png), I have slightly better performance (~5%) but neither results match the number in the paper (60%).
 - The implementation replicates two learners similar to original repo:
   - `learner_w_grad` functions as a regular model, get gradients and loss as inputs to meta learner.
   - `learner_wo_grad` constructs the graph for meta learner:
