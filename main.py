@@ -94,7 +94,7 @@ def meta_test(eps, eval_loader, learner_w_grad, learner_wo_grad, metalearner, ar
  
         logger.batch_info(loss=loss.item(), acc=acc, phase='eval')
 
-    logger.batch_info(eps=eps, totaleps=args.episode_val, phase='evaldone')
+    return logger.batch_info(eps=eps, totaleps=args.episode_val, phase='evaldone')
 
 
 def train_learner(learner_w_grad, metalearner, train_input, train_target, args):
@@ -167,9 +167,10 @@ def main():
         last_eps, metalearner, optim = resume_ckpt(metalearner, optim, args.resume, args.dev)
 
     if args.mode == 'test':
-        meta_test(last_eps, test_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger)
+        _ = meta_test(last_eps, test_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger)
         return
 
+    best_acc = 0.0
     logger.loginfo("Start training")
     # Meta-training
     for eps, (episode_x, episode_y) in enumerate(train_loader):
@@ -203,7 +204,10 @@ def main():
         # Meta-validation
         if eps % args.val_freq == 0 and eps != 0:
             save_ckpt(eps, metalearner, optim, args.save)
-            meta_test(eps, val_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger)
+            acc = meta_test(eps, val_loader, learner_w_grad, learner_wo_grad, metalearner, args, logger)
+            if acc > best_acc:
+                best_acc = acc
+                logger.loginfo("* Best accuracy so far *\n")
 
     logger.loginfo("Done")
 

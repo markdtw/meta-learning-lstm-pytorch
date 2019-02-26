@@ -3,7 +3,7 @@
 # For 5-shot, 5-class evaluation, hyper-parameters follow github.com/twitter/meta-learning-lstm
 
 python main.py --mode test \
-               --resume logs/ckpts/meta-learner-41000.pth.tar \
+               --resume logs-1541/ckpts/meta-learner-42000.pth.tar \
                --n-shot 5 \
                --n-eval 15 \
                --n-class 5 \

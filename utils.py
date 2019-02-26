@@ -74,6 +74,7 @@ class GOATLogger:
                 kwargs['eps'], kwargs['totaleps'], loss_mean, loss_std, acc_mean, acc_std))
 
             self.reset_stats()
+            return acc_mean
 
         else:
             raise ValueError("phase {} not supported".format(kwargs['phase']))
